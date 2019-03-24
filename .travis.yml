@@ -1,0 +1,30 @@
+sudo: required
+dist: trusty
+language:
+  - cpp
+compiler:
+  - g++
+
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - g++-7
+      
+script:
+  - sudo ln -s /usr/bin/g++-7 /usr/local/bin/g++
+  - g++ -v
+  - export CXX=/usr/bin/g++-7
+  - make
+  - make test
+
+os:
+- linux
+
+branches:
+  only:
+  - master
+  
+notifications:
+  email: false
