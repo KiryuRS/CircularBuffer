@@ -133,6 +133,7 @@ public:
 
     ~CircularBuffer()
     {
+        clear();
         mAlloc.deallocate(mBuffer, mCapacity);
     }
 
@@ -245,6 +246,7 @@ public:
     {
         value_type value = mBuffer[mFirst];
         pointer iter = mBuffer + mFirst;
+        iter->~T();
         memset(iter, INVALID, sizeof(*iter));
         if (mFirst != mLast)
             mFirst = (mFirst + 1) % mCapacity;
