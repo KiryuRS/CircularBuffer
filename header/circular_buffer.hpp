@@ -2,11 +2,11 @@
 #define CIRCULAR_BUFFER_R
 
 #include <memory>               // std::allocator, std::allocator_traits, std::uninitialized_copy
-#include <cstddef>              // std::ptrdiff_t, std::size_t
+#include <cstddef>              // std::ptrdiff_t
 #include <stdexcept>            // std::out_of_range
 #include <cstring>              // std::memset
 #include <iterator>             // std::bidirectional_iterator_tag
-#include <type_traits>          // std::remove_cv, std::remove_reference
+#include <type_traits>          // std::remove_cv
 #include <iostream>             // std::ostream
 #include <tuple>                // std::tie
 
@@ -91,7 +91,7 @@ public:
     using reverse_iterator =        Iterator<T, true>;
     using const_reverse_iterator =  Iterator<const T, true>;
 
-    CircularBuffer(size_t size = 1)
+    explicit CircularBuffer(size_t size = 1)
         : mAlloc{ }, mCapacity{ size }, mBuffer{ mAlloc.allocate(size) },
           mFirst{ 0 }, mLast{ 0 }
     {
@@ -248,8 +248,8 @@ public:
 
     void clear()
     {
-        std::size_t end = mLast + 1;
-        for (std::size_t i = mFirst; i != end; ++i)
+        size_t end = mLast + 1;
+        for (size_t i = mFirst; i != end; ++i)
             mBuffer[i].~T();
         for (auto& elem : *this)
             memset(&elem, INVALID, sizeof(elem));

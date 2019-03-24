@@ -48,11 +48,11 @@ using CharCB = CircularBuffer<char>;
 bool TestConstruction()
 {
 	std::array<int, 5> arr{ 1,2,3,4,5 };
-	IntCB cb1{ };
+	IntCB cb1(arr.size());
 	IntCB cb2{ arr.begin(), arr.end() };
 	IntCB cb3{ cb2 };
 	IntCB cb4{ std::move(cb3) };
-	return cb1.capacity() == 1 && cb4[4] == arr.back();
+	return cb1.capacity() == arr.size() && cb4[4] == arr.back();
 }
 
 bool TestAssignment()
