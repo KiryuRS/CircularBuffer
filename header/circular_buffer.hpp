@@ -6,7 +6,7 @@
 #include <stdexcept>            // std::out_of_range
 #include <cstring>              // std::memset
 #include <iterator>             // std::bidirectional_iterator_tag
-#include <type_traits>          // std::remove_cv
+#include <type_traits>          // std::remove_cv, std::remove_reference
 #include <iostream>             // std::ostream
 #include <tuple>                // std::tie
 
