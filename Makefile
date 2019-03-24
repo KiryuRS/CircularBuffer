@@ -13,4 +13,4 @@ clean:
 	$(RM) $(ALL) *.o
 
 test: all
-	./simpletest
+	./st1.exe
