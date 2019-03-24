@@ -256,7 +256,7 @@ public:
     void clear()
     {
         size_t end = mLast + 1;
-        for (size_t i = mFirst; i != end; ++i)
+        for (size_t i = mFirst; i != end; i = (i + 1) % mCapacity)
             mBuffer[i].~T();
         for (auto& elem : *this)
             memset(&elem, INVALID, sizeof(elem));
