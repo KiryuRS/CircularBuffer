@@ -67,14 +67,14 @@ public:
         using reference =           typename std::remove_reference<T1>::type&;
 
         Iterator(T1 *_iter) : mIter{ _iter} { }
-        reference operator*() noexcept                      { return *mIter; }
-        reference operator->() noexcept                     { return *mIter; }
+        reference operator*() const noexcept                { return *mIter; }
+        reference operator->() const noexcept               { return *mIter; }
         bool operator==(const Iterator& rhs) const noexcept { return mIter == rhs.mIter; }
         bool operator!=(const Iterator& rhs) const noexcept { return !operator==(rhs); }
-        Iterator& operator++() const                        { PreIncrementHelper<T1, isReversed>{}(*const_cast<Iterator*>(this)); return *this; }
-        Iterator operator++(int) const                      { Iterator retval{ *this }; ++(*this); return retval; }
-        Iterator& operator--() const                        { PreDecrementHelper<T1, isReversed>{}(*const_cast<Iterator*>(this)); return *this; }
-        Iterator operator--(int) const                      { Iterator retval{ *this }; --(*this); return retval; }
+        Iterator& operator++()                              { PreIncrementHelper<T1, isReversed>{}(*this); return *this; }
+        Iterator operator++(int)                            { Iterator retval{ *this }; ++(*this); return retval; }
+        Iterator& operator--()                              { PreDecrementHelper<T1, isReversed>{}(*this); return *this; }
+        Iterator operator--(int)                            { Iterator retval{ *this }; --(*this); return retval; }
         friend std::ostream& operator<<(std::ostream& os, const Iterator& rhs)  { return os << reinterpret_cast<void*>(rhs.mIter); }
     };
 
