@@ -16,8 +16,10 @@ class CircularBuffer
 	const unsigned char INVALID = 0xEE;
 
 	Allocator mAlloc;
+	size_t mCapacity;
 	T* mBuffer;
-	std::size_t mFirst, mLast, mCapacity;
+	std::size_t mFirst;
+	std::size_t mLast;
 
 public:
 	template <typename T1, bool isReversed = false>
@@ -90,7 +92,7 @@ public:
 	using const_reverse_iterator = 	Iterator<const T, true>;
 
 	CircularBuffer(size_t size = 1)
-		: mCapacity{ size }, mAlloc{ }, mBuffer{ mAlloc.allocate(size) },
+		: mAlloc{ }, mCapacity{ size }, mBuffer{ mAlloc.allocate(size) },
 		  mFirst{ 0 }, mLast{ 0 }
 	{
 		for (auto& elem : *this)
@@ -98,7 +100,7 @@ public:
 	}
 
 	CircularBuffer(const CircularBuffer& rhs)
-		: mCapacity{ rhs.mCapacity }, mAlloc{ rhs.mAlloc },
+		: mAlloc{ rhs.mAlloc }, mCapacity{ rhs.mCapacity },
 		  mBuffer{ mAlloc.allocate(mCapacity) }, mFirst{ rhs.mFirst },
 		  mLast{ rhs.mLast }
 	{
@@ -107,7 +109,7 @@ public:
 	}
 
 	CircularBuffer(CircularBuffer&& rhs)
-		: mCapacity{ rhs.mCapacity }, mAlloc{ rhs.mAlloc },
+		: mAlloc{ rhs.mAlloc }, mCapacity{ rhs.mCapacity },
 		  mBuffer{ rhs.mBuffer }, mFirst{ rhs.mFirst }, mLast{ rhs.mLast }
 	{
 		rhs.mBuffer = nullptr;
@@ -118,10 +120,9 @@ public:
 
 	template <typename U>
 	CircularBuffer(U _begin, U _end)
-		: mCapacity{ static_cast<unsigned long>(_end - _begin) }, mAlloc{ }, 
-		  mBuffer{ nullptr }, mFirst{ 0 }, mLast{ mCapacity - 1 }
-	{ 
-		mBuffer = mAlloc.allocate(mCapacity);
+		: mAlloc{ }, mCapacity{ static_cast<unsigned long>(_end - _begin) }, 
+		  mBuffer{ mAlloc.allocate(mCapacity) }, mFirst{ 0 }, mLast{ mCapacity - 1 }
+	{
 		std::uninitialized_copy(_begin, _end, mBuffer);
 	}
 
@@ -161,8 +162,7 @@ public:
 			return *reinterpret_cast<unsigned char*>(&mBuffer[mFirst]) != INVALID;
 		if (mFirst < mLast)
 			return mLast - mFirst + 1;
-		if (mFirst > mLast)
-			return mCapacity - (mFirst - mLast - 1);
+		return mCapacity - (mFirst - mLast - 1);
 	}
 
 	value_type operator[](unsigned index) const
@@ -253,8 +253,8 @@ public:
 	reference at(unsigned index) 								{ return operator[](index); }
 	value_type back() const 									{ return mBuffer[mLast]; }
 	reference back() 											{ return mBuffer[mLast]; }
-	value_type first() const 									{ return mBuffer[mFirst]; }
-	reference first() const 									{ return mBuffer[mLast]; }
+	value_type first() 											{ return mBuffer[mFirst]; }
+	reference first() const 									{ return mBuffer[mFirst]; }
 	pointer data() const 										{ return mBuffer; }
 	Allocator get_allocator() const 							{ return mAlloc; }
 	bool empty() const noexcept									{ return mLast == mFirst && *reinterpret_cast<unsigned char*>(&mBuffer[mFirst]) == INVALID; }
