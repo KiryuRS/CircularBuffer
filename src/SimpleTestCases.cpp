@@ -71,7 +71,7 @@ bool TestAssignment()
 bool TestPushEmplacePop()
 {
 	std::array<int, 5> arr{ 2,6,7,-1,1 };
-	IntCB cb{ 5 };
+	IntCB cb(arr.size());
 	cb.push(-1);
 	cb.emplace(1);
 	cb.push(2);
@@ -96,7 +96,7 @@ bool TestPushEmplacePop()
 
 bool TestRangedForLoop()
 {
-	CharCB cb{ 6 };
+	CharCB cb(6);
 	cb.push('A');
 	cb.push('B');
 	cb.push('C');
@@ -136,7 +136,7 @@ bool TestSTLAlgorithms()
 	std::for_each(cb.begin(), cb.end(), [&sum](int value){ sum += value; });
 	sum %= sum;
 	std::fill(cb.begin(), cb.end(), 1);
-	IntCB anotherCB{ cb.size() };
+	IntCB anotherCB(cb.size());
 	std::copy(cb.begin(), cb.end(), anotherCB.begin());
 	auto iter = std::find(anotherCB.begin(), anotherCB.end(), sum);
 	return iter == anotherCB.end();

@@ -8,6 +8,7 @@
 #include <iterator>             // std::bidirectional_iterator_tag
 #include <type_traits>          // std::remove_cv
 #include <iostream>             // std::ostream
+#include <initializer_list>     // std::initializer_list
 #include <tuple>                // std::tie
 
 template <typename T, typename Allocator = std::allocator<T>>
@@ -125,6 +126,10 @@ public:
     {
         std::uninitialized_copy(_begin, _end, mBuffer);
     }
+
+    CircularBuffer(std::initializer_list<T> il)
+        : CircularBuffer{ il.begin(), il.end() }
+    { }
 
     ~CircularBuffer()
     {
