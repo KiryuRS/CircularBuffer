@@ -71,9 +71,9 @@ public:
         reference operator->() noexcept                     { return *mIter; }
         bool operator==(const Iterator& rhs) const noexcept { return mIter == rhs.mIter; }
         bool operator!=(const Iterator& rhs) const noexcept { return !operator==(rhs); }
-        Iterator operator++() const                         { PreIncrementHelper<T1, isReversed>{}(*const_cast<Iterator*>(this)); return *this; }
+        Iterator& operator++() const                        { PreIncrementHelper<T1, isReversed>{}(*const_cast<Iterator*>(this)); return *this; }
         Iterator operator++(int) const                      { Iterator retval{ *this }; ++(*this); return retval; }
-        Iterator operator--() const                         { PreDecrementHelper<T1, isReversed>{}(*const_cast<Iterator*>(this)); return *this; }
+        Iterator& operator--() const                        { PreDecrementHelper<T1, isReversed>{}(*const_cast<Iterator*>(this)); return *this; }
         Iterator operator--(int) const                      { Iterator retval{ *this }; --(*this); return retval; }
         friend std::ostream& operator<<(std::ostream& os, const Iterator& rhs)  { return os << reinterpret_cast<void*>(rhs.mIter); }
     };
