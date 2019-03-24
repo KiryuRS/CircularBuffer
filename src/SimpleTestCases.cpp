@@ -1,7 +1,8 @@
-#include "../header/circular_buffer.hpp"
+#include "circular_buffer.hpp"
 #include <string>
 #include <array>
 #include <iostream>
+#include <algorithm>
 
 #ifdef __GNUC__
 
@@ -51,7 +52,7 @@ bool TestConstruction()
 	IntCB cb2{ arr.begin(), arr.end() };
 	IntCB cb3{ cb2 };
 	IntCB cb4{ std::move(cb3) };
-	return cb1.capacity() == 1 && cb4[4] == 5;
+	return cb1.capacity() == 1 && cb4[4] == arr.back();
 }
 
 bool TestAssignment()
@@ -64,17 +65,33 @@ bool TestAssignment()
 	cb4 = cb3;
 	cb3 = cb4;
 	cb4 = std::move(cb3);
-	return cb4[4] == 5;
+	return cb4[4] == arr.back();
 }
 
-bool TestPushPop()
+bool TestPushEmplacePop()
 {
-	StringCB cb;
-	cb.push("Hello World!");
-	cb.push("Goodbye World!");
-	cb.push("HHH");
+	std::array<int, 5> arr{ 2,6,7,-1,1 };
+	IntCB cb{ 5 };
+	cb.push(-1);
+	cb.emplace(1);
+	cb.push(2);
+	cb.emplace(3);
+	cb.emplace(4);
+	cb.emplace(5);
+	cb.emplace(6);
+	cb.emplace(7);
 	cb.pop();
-	return cb.size() == 0;
+	cb.pop();
+	cb.pop();
+	cb.emplace(-1);
+	cb.push(1);
+	cb.emplace(2);
+	int* cData = cb.data();
+	int* aData = arr.data();
+	bool is_same = true;
+	for (unsigned i = 0; i != 5; ++i)
+		is_same = cData[i] != aData[i] ? false : is_same;
+	return is_same;
 }
 
 bool TestRangedForLoop()
@@ -100,7 +117,45 @@ bool TestSubscript()
 	IntCB cb1{ arr.begin(), arr.end() };
 	for (unsigned i = 1; i != 10; ++i)
 		cb1[i] += cb1[i - 1];
-	return cb1[9] == 55;
+	bool success;
+	try
+	{
+		success = cb1[999] == 55;			// should invoke a std::out_of_range error
+	} catch (const std::out_of_range& e)
+	{
+		success = cb1[9] == 55;
+	}
+	return success;
+}
+
+bool TestSTLAlgorithms()
+{
+	std::array<int, 10> arr{ 1,2,3,4,5,6,7,8,9,10 };
+	IntCB cb{ arr.begin(), arr.end() };
+	int sum = 0;
+	std::for_each(cb.begin(), cb.end(), [&sum](int value){ sum += value; });
+	sum %= sum;
+	std::fill(cb.begin(), cb.end(), 1);
+	IntCB anotherCB{ cb.size() };
+	std::copy(cb.begin(), cb.end(), anotherCB.begin());
+	auto iter = std::find(anotherCB.begin(), anotherCB.end(), sum);
+	return iter == anotherCB.end();
+}
+
+bool TestResize()
+{
+	std::array<int, 5> arr{ 1,2,3,4,5 };
+	IntCB cb{ arr.begin(), arr.end() };
+	cb.resize(10);
+	cb.resize(20);
+	cb.resize(7);
+	cb.resize(6);
+	cb.resize(1);
+	cb.resize(3);
+	cb.resize(5);
+	int first = cb.first();
+	int back = cb.back();
+	return first == back;
 }
 
 int main(void)
@@ -108,8 +163,10 @@ int main(void)
 	std::cout << "\n=========================== BEGIN TEST ===========================\n";
 	TEST(TestConstruction());
 	TEST(TestAssignment());
-	TEST(TestPushPop());
+	TEST(TestPushEmplacePop());
 	TEST(TestRangedForLoop());
 	TEST(TestSubscript());
+	TEST(TestSTLAlgorithms());
+	TEST(TestResize());
 	std::cout << "============================ END TEST ============================" << std::endl;
 }

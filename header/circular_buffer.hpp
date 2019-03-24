@@ -182,12 +182,19 @@ public:
     void resize(unsigned sz)
     {
         T* tmp = mAlloc.allocate(sz);
-        size_type diff = mLast - mFirst;
+        size_type diff = size();
         if (mCapacity <= sz)
             std::uninitialized_copy(mBuffer, mBuffer + mCapacity, tmp);
         else
         {
             std::uninitialized_copy(mBuffer, mBuffer + sz, tmp);
+            if (mFirst >= sz)
+                mFirst = sz - 1;
+            if (diff > sz)
+            {
+                diff = sz - diff;
+                mLast = (mLast + diff) % sz;
+            }
         }
         mAlloc.deallocate(mBuffer, mCapacity);
         mCapacity = sz;
