@@ -18,8 +18,8 @@ class CircularBuffer
     Allocator mAlloc;
     size_t mCapacity;
     T* mBuffer;
-    std::size_t mFirst;
-    std::size_t mLast;
+    size_t mFirst;
+    size_t mLast;
 
 public:
     template <typename T1, bool isReversed = false>
@@ -80,7 +80,7 @@ public:
 
     using value_type =              typename std::remove_cv<T>::type;
     using allocator_type =          Allocator;
-    using size_type =               std::size_t;
+    using size_type =               size_t;
     using difference_type =         std::ptrdiff_t;
     using reference =               value_type&;
     using const_reference =         const value_type&;
