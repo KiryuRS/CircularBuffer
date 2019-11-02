@@ -39,11 +39,11 @@
 
 #endif
 
-using IntCB = CircularBuffer<int>;
-using FloatCB = CircularBuffer<float>;
-using StringCB = CircularBuffer<std::string>;
-using UCharCB = CircularBuffer<unsigned char>;
-using CharCB = CircularBuffer<char>;
+using IntCB = circular_buffer<int>;
+using FloatCB = circular_buffer<float>;
+using StringCB = circular_buffer<std::string>;
+using UCharCB = circular_buffer<unsigned char>;
+using CharCB = circular_buffer<char>;
 
 bool TestConstruction()
 {

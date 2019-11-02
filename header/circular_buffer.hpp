@@ -35,291 +35,497 @@
 #ifndef CIRCULAR_BUFFER_R
 #define CIRCULAR_BUFFER_R
 
-#include <memory>               // std::allocator, std::allocator_traits, std::uninitialized_copy
-#include <cstddef>              // std::ptrdiff_t
-#include <stdexcept>            // std::out_of_range
-#include <cstring>              // std::memset
-#include <iterator>             // std::bidirectional_iterator_tag
-#include <type_traits>          // std::remove_cv
-#include <iostream>             // std::ostream
-#include <initializer_list>     // std::initializer_list
-#include <tuple>                // std::tie
+#include <memory>
+#include <cstddef>
+#include <cstring>
+#include <iterator>
+#include <initializer_list>
+#include <tuple>
 
 template <typename T, typename Allocator = std::allocator<T>>
-class CircularBuffer
+class circular_buffer
 {
-    const unsigned char INVALID = 0xEE;
+	static constexpr unsigned char INVALID = 0xCC;
 
-    Allocator mAlloc;
-    size_t mCapacity;
-    T* mBuffer;
-    size_t mFirst;
-    size_t mLast;
+	Allocator mAlloc;
+	size_t mCap;
+	T* mBuffer;
+	T* mStart, *mEnd;
 
 public:
-    template <typename T1, bool isReversed = false>
-    class Iterator
-    {
-        T1 *mIter;
-        friend class PreIncrementHelper;
-        friend class PreDecrementHelper;
 
-        template <typename U, bool reverse>
-        struct PreIncrementHelper;
+	template <typename T1>
+	class Iterator
+	{
+		T1* mIter;
 
-        template <typename U>
-        struct PreIncrementHelper<U, false>
-        {
-            void operator()(Iterator& iter) const { ++iter.mIter; }
-        };
+	public:
+		using iterator_category = std::random_access_iterator_tag;
+		using difference_type = std::ptrdiff_t;
+		using value_type = T1;
+		using pointer = typename std::remove_reference<T>::type*;
+		using reference = typename std::remove_reference<T>::type&;
 
-        template <typename U>
-        struct PreIncrementHelper<U, true>
-        {
-            void operator()(Iterator& iter) const { --iter.mIter; }
-        };
+		Iterator(T1 *iter) noexcept
+			: mIter{ iter }
+		{ }
+		
+		reference operator*() const noexcept
+		{
+			return *mIter;
+		}
 
-        template <typename U, bool reverse>
-        struct PreDecrementHelper;
+		pointer operator->() const noexcept
+		{
+			return mIter;
+		}
 
-        template <typename U>
-        struct PreDecrementHelper<U, false>
-        {
-            void operator()(Iterator& iter) const { --iter.mIter; }
-        };
+		bool operator==(const Iterator& rhs) const noexcept
+		{
+			return mIter == rhs.mIter;
+		}
 
-        template <typename U>
-        struct PreDecrementHelper<U, true>
-        {
-            void operator()(Iterator& iter) const { ++iter.mIter; }
-        };
+		bool operator!=(const Iterator& rhs) const noexcept 
+		{ 
+			return !operator==(rhs);
+		}
 
-    public:
-        using iterator_category =   std::bidirectional_iterator_tag;
-        using difference_type =     std::ptrdiff_t;
-        using value_type =          typename std::decay<T1>::type;
-        using pointer =             typename std::remove_reference<T1>::type*;
-        using reference =           typename std::remove_reference<T1>::type&;
+		Iterator& operator++() noexcept 
+		{ 
+			++mIter; return *this; 
+		}
 
-        Iterator(T1 *_iter) : mIter{ _iter} { }
-        reference operator*() const noexcept                { return *mIter; }
-        reference operator->() const noexcept               { return *mIter; }
-        bool operator==(const Iterator& rhs) const noexcept { return mIter == rhs.mIter; }
-        bool operator!=(const Iterator& rhs) const noexcept { return !operator==(rhs); }
-        Iterator& operator++()                              { PreIncrementHelper<T1, isReversed>{}(*this); return *this; }
-        Iterator operator++(int)                            { Iterator retval{ *this }; ++(*this); return retval; }
-        Iterator& operator--()                              { PreDecrementHelper<T1, isReversed>{}(*this); return *this; }
-        Iterator operator--(int)                            { Iterator retval{ *this }; --(*this); return retval; }
-        friend std::ostream& operator<<(std::ostream& os, const Iterator& rhs)  { return os << reinterpret_cast<void*>(rhs.mIter); }
-    };
+		Iterator operator++(int) noexcept 
+		{ 
+			Iterator tmp{ *this }; 
+			++mIter; 
+			return tmp; 
+		}
 
-    using value_type =              typename std::remove_cv<T>::type;
-    using allocator_type =          Allocator;
-    using size_type =               size_t;
-    using difference_type =         std::ptrdiff_t;
-    using reference =               value_type&;
-    using const_reference =         const value_type&;
-    using pointer =                 typename std::allocator_traits<Allocator>::pointer;
-    using const_pointer =           typename std::allocator_traits<Allocator>::const_pointer;
-    using iterator =                Iterator<T>;
-    using const_iterator =          Iterator<const T>;
-    using reverse_iterator =        Iterator<T, true>;
-    using const_reverse_iterator =  Iterator<const T, true>;
+		Iterator& operator--() noexcept 
+		{ 
+			--mIter; 
+			return *this; 
+		}
 
-    explicit CircularBuffer(size_t size = 1)
-        : mAlloc{ }, mCapacity{ size }, mBuffer{ mAlloc.allocate(size) },
-          mFirst{ 0 }, mLast{ 0 }
-    {
-        for (auto& elem : *this)
-            memset(&elem, INVALID, sizeof(elem));
-    }
+		Iterator operator--(int) noexcept 
+		{ 
+			Iterator tmp{ *this }; 
+			--mIter; 
+			return tmp; 
+		}
 
-    CircularBuffer(const CircularBuffer& rhs)
-        : mAlloc{ rhs.mAlloc }, mCapacity{ rhs.mCapacity },
-          mBuffer{ mAlloc.allocate(mCapacity) }, mFirst{ rhs.mFirst },
-          mLast{ rhs.mLast }
-    {
-        T* end = rhs.mBuffer + mCapacity;
-        std::uninitialized_copy(rhs.mBuffer, end, mBuffer);
-    }
+		Iterator operator+(size_t pos) const noexcept 
+		{ 
+			return mIter + pos; 
+		}
 
-    CircularBuffer(CircularBuffer&& rhs)
-        : mAlloc{ rhs.mAlloc }, mCapacity{ rhs.mCapacity },
-          mBuffer{ rhs.mBuffer }, mFirst{ rhs.mFirst }, mLast{ rhs.mLast }
-    {
-        rhs.mBuffer = nullptr;
-        rhs.mFirst = 0;
-        rhs.mLast = 0;
-        rhs.mCapacity = 0;
-    }
+		difference_type operator-(const Iterator& rhs) const noexcept 
+		{ 
+			return mIter - rhs.mIter;
+		}
 
-    template <typename U>
-    CircularBuffer(U _begin, U _end)
-        : mAlloc{ }, mCapacity{ static_cast<unsigned long>(_end - _begin) }, 
-          mBuffer{ mAlloc.allocate(mCapacity) }, mFirst{ 0 }, mLast{ mCapacity - 1 }
-    {
-        std::uninitialized_copy(_begin, _end, mBuffer);
-    }
+		Iterator operator-(size_t pos) const noexcept 
+		{ 
+			return mIter - pos; 
+		}
+	};
 
-    CircularBuffer(std::initializer_list<T> il)
-        : CircularBuffer{ il.begin(), il.end() }
-    { }
+	template <typename T1>
+	class ReverseIterator
+	{
+		T1* mCurr, *mPrev;
 
-    ~CircularBuffer()
-    {
-        clear();
-        mAlloc.deallocate(mBuffer, mCapacity);
-    }
+	public:
+		using iterator_category = std::random_access_iterator_tag;
+		using difference_type = std::ptrdiff_t;
+		using value_type = T1;
+		using pointer = typename std::remove_reference<T>::type*;
+		using reference = typename std::remove_reference<T>::type&;
 
-    CircularBuffer& operator=(const CircularBuffer& rhs)
-    {
-        T* tmp = mAlloc.allocate(rhs.mCapacity);
-        T* end = rhs.mBuffer + rhs.mCapacity;
-        std::uninitialized_copy(rhs.mBuffer, end, tmp);
-        mAlloc.deallocate(mBuffer, mCapacity);
-        
-        mAlloc = rhs.mAlloc;
-        mCapacity = rhs.mCapacity;
-        mBuffer = tmp;
-        mFirst = rhs.mFirst;
-        mLast = rhs.mLast;
-        return *this;
-    }
+		ReverseIterator(T1 *iter) noexcept 
+			: mCurr{ iter }, mPrev{ std::prev(iter) }
+		{ }
 
-    CircularBuffer& operator=(CircularBuffer&& rhs)
-    {
-        std::swap(mCapacity, rhs.mCapacity);
-        std::swap(mBuffer, rhs.mBuffer);
-        std::swap(mFirst, rhs.mFirst);
-        std::swap(mLast, rhs.mLast);
-        std::swap(mAlloc, rhs.mAlloc);
-        return *this;
-    }
+		reference operator*() const noexcept 
+		{ 
+			return *mPrev; 
+		}
 
-    size_type size() const noexcept
-    {
-        if (mFirst == mLast)
-            return *reinterpret_cast<unsigned char*>(&mBuffer[mFirst]) != INVALID;
-        if (mFirst < mLast)
-            return mLast - mFirst + 1;
-        return mCapacity - (mFirst - mLast - 1);
-    }
+		pointer operator->() const noexcept 
+		{ 
+			return mPrev; 
+		}
 
-    value_type operator[](unsigned index) const
-    {
-        if (index >= mCapacity)
-            throw std::out_of_range{ "Accessing out of bounds!" };
-        return mBuffer[index];
-    }
+		bool operator==(const ReverseIterator& rhs) const noexcept 
+		{ 
+			return std::tie(mCurr, mPrev) == std::tie(rhs.mCurr, rhs.mPrev); 
+		}
 
-    reference operator[](unsigned index)
-    {
-        if (index >= mCapacity)
-            throw std::out_of_range{ "Accessing out of bounds!" };
-        return mBuffer[index];
-    }
+		bool operator!=(const ReverseIterator& rhs) const noexcept 
+		{ 
+			return !operator==(rhs); 
+		}
 
-    void resize(unsigned sz)
-    {
-        T* tmp = mAlloc.allocate(sz);
-        size_type diff = size();
-        if (mCapacity <= sz)
-            std::uninitialized_copy(mBuffer, mBuffer + mCapacity, tmp);
-        else
-        {
-            std::uninitialized_copy(mBuffer, mBuffer + sz, tmp);
-            if (mFirst >= sz)
-                mFirst = sz - 1;
-            if (diff > sz)
-            {
-                diff = sz - diff;
-                mLast = (mLast + diff) % sz;
-            }
-        }
-        mAlloc.deallocate(mBuffer, mCapacity);
-        mCapacity = sz;
-        mBuffer = tmp;
-    }
+		ReverseIterator& operator++() noexcept 
+		{ 
+			mCurr = mPrev; 
+			mPrev = std::prev(mPrev); 
+			return *this; 
+		}
 
-    void push(const T& value)
-    {
-        if (empty())
-            new (mBuffer + mLast) T{ value };
-        else if (size() != mCapacity)
-        {
-            mLast = (mLast + 1) % mCapacity;
-            new (mBuffer + mLast) T{ value };
-        }
-        else
-        {
-            new (mBuffer + mFirst) T{ value };
-            mLast = mFirst;
-            mFirst = (mFirst + 1) % mCapacity;
-        }
-    }
+		ReverseIterator operator++(int) noexcept 
+		{ 
+			ReverseIterator tmp{ *this }; 
+			++*this; 
+			return tmp; 
+		}
 
-    template <typename ... Args>
-    void emplace(Args&& ... args)
-    {
-        if (empty())
-            new (mBuffer + mLast) T{ std::forward<Args>(args)... };
-        else if (size() != mCapacity)
-        {
-            mLast = (mLast + 1) % mCapacity;
-            new (mBuffer + mLast) T{ std::forward<Args>(args)... };
-        }
-        else
-        {
-            new (mBuffer + mFirst) T{ std::forward<Args>(args)... };
-            mLast = mFirst;
-            mFirst = (mFirst + 1) % mCapacity;
-        }
-    }
+		ReverseIterator& operator--() noexcept 
+		{ 
+			mPrev = mCurr; 
+			mCurr = std::next(mCurr); 
+			return *this; 
+		}
 
-    value_type pop()
-    {
-        value_type value = mBuffer[mFirst];
-        pointer iter = mBuffer + mFirst;
-        iter->~T();
-        memset(iter, INVALID, sizeof(*iter));
-        if (mFirst != mLast)
-            mFirst = (mFirst + 1) % mCapacity;
-        return value;
-    }
+		ReverseIterator operator--(int) noexcept 
+		{ 
+			ReverseIterator tmp{ *this }; 
+			--*this; 
+			return tmp; 
+		}
 
-    void clear()
-    {
-        size_t end = mLast + 1;
-        bool atEnd = end == mCapacity;
-        for (size_t i = mFirst; i != end; atEnd ? ++i : (++i % mCapacity))
-            mBuffer[i].~T();
+		ReverseIterator operator+(size_t pos) const noexcept 
+		{ 
+			ReverseIterator tmp{ *this }; 
+			tmp.mCurr = tmp.mCurr - pos;
+			tmp.mPrev = std::prev(tmp.mCurr);
+			return tmp;
+		}
 
-        for (auto& elem : *this)
-            memset(&elem, INVALID, sizeof(elem));
-        mFirst = mLast = 0;
-    }
+		ReverseIterator operator-(size_t pos) const noexcept
+		{
+			ReverseIterator tmp{ *this }; 
+			tmp.mCurr = tmp.mCurr + pos;
+			tmp.mPrev = std::prev(tmp.mCurr);
+			return tmp;
+		}
 
-    value_type at(unsigned index) const                         { return operator[](index); }
-    reference at(unsigned index)                                { return operator[](index); }
-    value_type back() const                                     { return mBuffer[mLast]; }
-    reference back()                                            { return mBuffer[mLast]; }
-    value_type first()                                          { return mBuffer[mFirst]; }
-    reference first() const                                     { return mBuffer[mFirst]; }
-    pointer data() const                                        { return mBuffer; }
-    Allocator get_allocator() const                             { return mAlloc; }
-    bool empty() const noexcept                                 { return mLast == mFirst && *reinterpret_cast<unsigned char*>(&mBuffer[mFirst]) == INVALID; }
-    size_type capacity() const noexcept                         { return mCapacity; }
-    iterator begin() const noexcept                             { return mBuffer; }
-    iterator end() const noexcept                               { return mBuffer + mCapacity; }
-    const_iterator cbegin() const noexcept                      { return mBuffer; }
-    const_iterator cend() const noexcept                        { return mBuffer + mCapacity; }
-    reverse_iterator rbegin() const noexcept                    { return mBuffer + mLast; }
-    reverse_iterator rend() const noexcept                      { return mBuffer - 1; }
-    const_reverse_iterator crbegin() const noexcept             { return mBuffer + mLast; }
-    const_reverse_iterator crend() const noexcept               { return mBuffer - 1; }
-    bool operator==(const CircularBuffer& rhs) const noexcept   { return std::tie(mBuffer, mFirst, mLast, mCapacity) == std::tie(rhs.mBuffer, rhs.mFirst, rhs.mLast, rhs.mCapacity); }
-    bool operator!=(const CircularBuffer& rhs) const noexcept   { return !operator==(rhs); }
-    void swap(CircularBuffer& rhs)                              { *this = std::move(rhs); }
+		difference_type operator-(const ReverseIterator& rhs) const noexcept
+		{
+			return mCurr - rhs.mCurr;
+		}
+
+		Iterator<T1> base() const noexcept
+		{
+			return mCurr;
+		}
+	};
+
+	explicit circular_buffer(size_t size = 1)
+		: mAlloc{ }, mCap{ size }, mBuffer{ mAlloc.allocate(size) },
+		  mStart{ mBuffer }, mEnd{ mStart }
+	{
+		memset(mBuffer, INVALID, sizeof(T) * mCap);
+	}
+
+	circular_buffer(const circular_buffer& rhs)
+		: mAlloc{ rhs.mAlloc }, mCap{ rhs.mCap }, mBuffer{ mAlloc.allocate(rhs.mCap) },
+		  mStart{ rhs.mStart - rhs.mBuffer }, mEnd{ rhs.mEnd - rhs.mBuffer }
+	{
+		memcpy(mBuffer, rhs.mBuffer, sizeof(T) * rhs.mCap);
+	}
+
+	circular_buffer(circular_buffer&& rhs) noexcept
+		: mAlloc{ rhs.mAlloc }, mCap{ rhs.mCap }, mBuffer{ rhs.mBuffer },
+		  mStart{ rhs.mStart }, mEnd{ rhs.mEnd }
+	{
+		rhs.mStart = nullptr;
+		rhs.mEnd = nullptr;
+		rhs.mCap = 0;
+		rhs.mBuffer = nullptr;
+	}
+
+	template <typename InputIt>
+	circular_buffer(InputIt _begin, InputIt _end)
+		: mAlloc{ }, mCap{ _end - _begin },
+		  mBuffer{ mAlloc.allocate(mCap) }, mStart{ mBuffer }, mEnd{ mBuffer + mCap - 1 }
+	{
+		std::uninitialized_copy(_begin, _end, mBuffer);
+	}
+
+	circular_buffer(std::initializer_list<T> il)
+		: circular_buffer{ il.begin(), il.end() }
+	{ }
+
+	circular_buffer& operator=(const circular_buffer& rhs)
+	{
+		T* tmp = rhs.mAlloc.allocate(rhs.mCap);
+		memcpy(tmp, rhs.mBuffer, sizeof(T) * rhs.mCap);
+		size_t start_pos = mBuffer - mStart;
+		size_t end_pos = mBuffer - mEnd;
+		delete[] mBuffer;
+		mBuffer = tmp;
+		mStart = mBuffer + start_pos;
+		mEnd = mBuffer + end_pos;
+		mCap = rhs.mCap;
+		mAlloc = rhs.mAlloc;
+		return *this;
+	}
+
+	circular_buffer& operator=(circular_buffer&& rhs) noexcept
+	{
+		std::swap(mBuffer, rhs.mBuffer);
+		std::swap(mCap, rhs.mCap);
+		std::swap(mStart, rhs.mStart);
+		std::swap(mEnd, rhs.mEnd);
+		std::swap(mAlloc, rhs.mAlloc);
+		return *this;
+	}
+
+	~circular_buffer()
+	{
+		clear();
+		mAlloc.deallocate(mBuffer, mCap);
+		mBuffer = nullptr;
+	}
+
+	void clear()
+	{
+		T* end = mBuffer + mCap;
+		T* iter = mStart;
+		while (iter != mEnd)
+		{
+			iter->~T();
+			iter = std::next(iter) == end ? mBuffer : std::next(iter);
+		}
+		mEnd = mBuffer;
+		mStart = mBuffer;
+		memset(mBuffer, INVALID, sizeof(T) * mCap);
+	}
+
+	size_t size() const noexcept
+	{
+		if (mStart - mEnd == 0)
+			return *reinterpret_cast<unsigned char*>(mStart) != INVALID;
+
+		if (mStart - mEnd < 0)
+			return  mEnd - mStart;
+
+		if (std::prev(mStart) == mEnd)
+			return mCap;
+
+		return mCap - (mStart - mEnd);
+	}
+
+	void resize(size_t sz)
+	{
+		T* tmp = mAlloc.allocate(sz);
+		size_t curr_size = size();
+		if (mCap <= sz)
+		{
+			memcpy(tmp, mBuffer, sizeof(T) * mCap);
+			if (sz - mCap)
+				memset(tmp + mCap, INVALID, sizeof(T) * (sz - mCap));
+			size_t start_pos = mStart - mBuffer;
+			size_t end_pos = mEnd - mBuffer;
+			mStart = tmp + start_pos;
+			mEnd = tmp + end_pos;
+		}
+		else
+		{
+			memcpy(tmp, mBuffer, sizeof(T) * sz);
+			size_t start_pos = mStart - mBuffer;
+			size_t curr_size = size();
+			mStart = start_pos >= sz ? tmp + sz - 1 : tmp + start_pos;
+			T* new_end = tmp + sz;
+			mEnd = mStart + curr_size;
+			if (mEnd - new_end >= 0)
+				mEnd = tmp + (mEnd - new_end);
+		}
+		mAlloc.deallocate(mBuffer, mCap);
+		mBuffer = tmp;
+		mCap = sz;
+	}
+
+	bool empty() const noexcept
+	{
+		return mStart == mEnd && *reinterpret_cast<unsigned char*>(mStart) == INVALID;
+	}
+
+	size_t capacity() const noexcept
+	{
+		return mCap;
+	}
+
+	T operator[](unsigned index) const
+	{
+		if (index >= mCap)
+			throw std::out_of_range{ "array out of bounds!" };
+		T* iter = mStart + index;
+		T* end = mBuffer + mCap;
+		int offset = iter - end;
+		if (offset < 0)
+			return *iter;
+		return mBuffer + offset;
+	}
+
+	T& operator[](unsigned index)
+	{
+		if (index >= mCap)
+			throw std::out_of_range{ "array out of bounds!" };
+		T* iter = mStart + index;
+		T* end = mBuffer + mCap;
+		int offset = iter - end;
+		if (offset < 0)
+			return *iter;
+		return mBuffer + offset;
+	}
+
+	void push(const T& value)
+	{
+		if (empty())
+			*mStart = value;
+		else
+		{
+			T* end = mBuffer + mCap;
+			mEnd = std::next(mEnd) == end ? mBuffer : std::next(mEnd);
+			*mEnd = value;
+			if (mEnd == mStart)
+				mStart = std::next(mStart) == end ? mBuffer : std::next(mStart);
+		}
+	}
+
+	template <typename ... Args>
+	void emplace(Args&& ... args)
+	{
+		if (empty())
+			new (mStart) T{ std::forward<Args>(args)... };
+		else
+		{
+			T* end = mBuffer + mCap;
+			mEnd = std::next(mEnd) == end ? mBuffer : std::next(mEnd);
+			new (mEnd) T{ std::forward<Args>(args)... };
+			if (mEnd == mStart)
+				mStart = std::next(mStart) == end ? mBuffer : std::next(mStart);
+		}
+	}
+
+	void pop()
+	{
+		memset(mEnd, INVALID, sizeof(T));
+		mEnd = mEnd == mBuffer ? mBuffer + mCap - 1 : std::prev(mEnd);
+	}
+
+	T at(unsigned index) const
+	{
+		return operator[](index);
+	}
+
+	T& at(unsigned index)
+	{
+		return operator[](index);
+	}
+
+	T back() const noexcept
+	{
+		return *mEnd;
+	}
+
+	T& back() noexcept
+	{
+		return *mEnd;
+	}
+
+	T front() const noexcept
+	{
+		return *mStart;
+	}
+
+	T& front() noexcept
+	{
+		return *mStart;
+	}
+
+	T* data() const noexcept
+	{
+		return mBuffer;
+	}
+
+	Allocator get_allocator() const noexcept
+	{
+		return mAlloc;
+	}
+
+	bool operator==(const circular_buffer& rhs) const noexcept
+	{
+		return std::tie(mBuffer, mStart, mEnd, mCap) == std::tie(rhs.mBuffer, rhs.mStart, rhs.mEnd, rhs.mCap);
+	}
+
+	bool operator!=(const circular_buffer& rhs) const noexcept
+	{
+		return !operator==(rhs);
+	}
+
+	void swap(circular_buffer& rhs)
+	{
+		circular_buffer tmp{ *this };
+		*this = std::move(rhs);
+		rhs = std::move(tmp);
+	}
+
+	Iterator<T> begin() const noexcept
+	{
+		return mBuffer;
+	}
+
+	Iterator<T> end() const noexcept
+	{
+		return mBuffer + mCap;
+	}
+
+	Iterator<const T> cbegin() const noexcept
+	{
+		return mBuffer;
+	}
+
+	Iterator<const T> cend() const noexcept
+	{
+		return mBuffer + mCap;
+	}
+
+	ReverseIterator<T> rebgin() const noexcept
+	{
+		return mBuffer + mCap;
+	}
+
+	ReverseIterator<T> rend() const noexcept
+	{
+		return mBuffer;
+	}
+
+	ReverseIterator<const T> crbegin() const noexcept
+	{
+		return mBuffer + mCap;
+	}
+
+	ReverseIterator<const T> crend() const noexcept
+	{
+		return mBuffer;
+	}
+
+	using value_type = T;
+	using allocator_type = Allocator;
+	using size_type = size_t;
+	using difference_type = std::ptrdiff_t;
+	using reference = T&;
+	using const_reference = const T&;
+	using pointer = T*;
+	using const_pointer = const T*;
+	using iterator = Iterator<T>;
+	using const_iterator = Iterator<const T>;
+	using reverse_iterator = ReverseIterator<T>;
+	using const_reverse_iterator = ReverseIterator<const T>;
 };
 
 #endif
