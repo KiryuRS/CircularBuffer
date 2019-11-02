@@ -270,12 +270,14 @@ public:
 
     circular_buffer& operator=(const circular_buffer& rhs)
     {
-        mAlloc = rhs.mAlloc;
+        Allocator tmpAlloc = rhs.mAlloc;
         T* tmp = mAlloc.allocate(rhs.mCap);
         memcpy(tmp, rhs.mBuffer, sizeof(T) * rhs.mCap);
         size_t start_pos = mBuffer - mStart;
         size_t end_pos = mBuffer - mEnd;
-        delete[] mBuffer;
+        mAlloc.deallocate(mBuffer, mCap);
+        
+        mAlloc = rhs.mAlloc;
         mBuffer = tmp;
         mStart = mBuffer + start_pos;
         mEnd = mBuffer + end_pos;
