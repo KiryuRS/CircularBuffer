@@ -63,14 +63,19 @@ public:
 		using iterator_category = std::random_access_iterator_tag;
 		using difference_type = std::ptrdiff_t;
 		using value_type = T1;
-		using pointer = typename std::remove_reference<T>::type*;
-		using reference = typename std::remove_reference<T>::type&;
+		using pointer = typename std::remove_reference<T1>::type*;
+		using reference = typename std::remove_reference<T1>::type&;
 
 		Iterator(T1 *iter) noexcept
 			: mIter{ iter }
 		{ }
 		
-		reference operator*() const noexcept
+		reference operator*() noexcept
+		{
+			return *mIter;
+		}
+
+		value_type operator*() const noexcept
 		{
 			return *mIter;
 		}
@@ -140,16 +145,21 @@ public:
 		using iterator_category = std::random_access_iterator_tag;
 		using difference_type = std::ptrdiff_t;
 		using value_type = T1;
-		using pointer = typename std::remove_reference<T>::type*;
-		using reference = typename std::remove_reference<T>::type&;
+		using pointer = typename std::remove_reference<T1>::type*;
+		using reference = typename std::remove_reference<T1>::type&;
 
 		ReverseIterator(T1 *iter) noexcept 
 			: mCurr{ iter }, mPrev{ std::prev(iter) }
 		{ }
 
-		reference operator*() const noexcept 
+		reference operator*() noexcept 
 		{ 
 			return *mPrev; 
+		}
+
+		value_type operator*() const noexcept
+		{
+			return *mPrev;
 		}
 
 		pointer operator->() const noexcept 
@@ -231,7 +241,7 @@ public:
 
 	circular_buffer(const circular_buffer& rhs)
 		: mAlloc{ rhs.mAlloc }, mCap{ rhs.mCap }, mBuffer{ mAlloc.allocate(rhs.mCap) },
-		  mStart{ rhs.mStart - rhs.mBuffer }, mEnd{ rhs.mEnd - rhs.mBuffer }
+		  mStart{ mBuffer + (rhs.mStart - rhs.mBuffer) }, mEnd{ mBuffer + (rhs.mEnd - rhs.mBuffer) }
 	{
 		memcpy(mBuffer, rhs.mBuffer, sizeof(T) * rhs.mCap);
 	}
@@ -248,7 +258,7 @@ public:
 
 	template <typename InputIt>
 	circular_buffer(InputIt _begin, InputIt _end)
-		: mAlloc{ }, mCap{ _end - _begin },
+		: mAlloc{ }, mCap{ static_cast<size_t>(_end - _begin) },
 		  mBuffer{ mAlloc.allocate(mCap) }, mStart{ mBuffer }, mEnd{ mBuffer + mCap - 1 }
 	{
 		std::uninitialized_copy(_begin, _end, mBuffer);
@@ -260,7 +270,8 @@ public:
 
 	circular_buffer& operator=(const circular_buffer& rhs)
 	{
-		T* tmp = rhs.mAlloc.allocate(rhs.mCap);
+		mAlloc = rhs.mAlloc;
+		T* tmp = mAlloc.allocate(rhs.mCap);
 		memcpy(tmp, rhs.mBuffer, sizeof(T) * rhs.mCap);
 		size_t start_pos = mBuffer - mStart;
 		size_t end_pos = mBuffer - mEnd;
@@ -269,7 +280,7 @@ public:
 		mStart = mBuffer + start_pos;
 		mEnd = mBuffer + end_pos;
 		mCap = rhs.mCap;
-		mAlloc = rhs.mAlloc;
+
 		return *this;
 	}
 
@@ -280,6 +291,7 @@ public:
 		std::swap(mStart, rhs.mStart);
 		std::swap(mEnd, rhs.mEnd);
 		std::swap(mAlloc, rhs.mAlloc);
+
 		return *this;
 	}
 
@@ -310,7 +322,7 @@ public:
 			return *reinterpret_cast<unsigned char*>(mStart) != INVALID;
 
 		if (mStart - mEnd < 0)
-			return  mEnd - mStart;
+			return  mEnd - mStart + 1;
 
 		if (std::prev(mStart) == mEnd)
 			return mCap;
@@ -337,11 +349,9 @@ public:
 			memcpy(tmp, mBuffer, sizeof(T) * sz);
 			size_t start_pos = mStart - mBuffer;
 			size_t curr_size = size();
-			mStart = start_pos >= sz ? tmp + sz - 1 : tmp + start_pos;
+			mStart = tmp + start_pos % sz;
 			T* new_end = tmp + sz;
-			mEnd = mStart + curr_size;
-			if (mEnd - new_end >= 0)
-				mEnd = tmp + (mEnd - new_end);
+			mEnd = mStart + curr_size % sz;
 		}
 		mAlloc.deallocate(mBuffer, mCap);
 		mBuffer = tmp;
@@ -367,7 +377,7 @@ public:
 		int offset = iter - end;
 		if (offset < 0)
 			return *iter;
-		return mBuffer + offset;
+		return *(mBuffer + static_cast<unsigned>(offset));
 	}
 
 	T& operator[](unsigned index)
@@ -379,7 +389,7 @@ public:
 		int offset = iter - end;
 		if (offset < 0)
 			return *iter;
-		return mBuffer + offset;
+		return *(mBuffer + static_cast<unsigned>(offset));
 	}
 
 	void push(const T& value)
@@ -413,7 +423,10 @@ public:
 
 	void pop()
 	{
+		mEnd->~T();
 		memset(mEnd, INVALID, sizeof(T));
+		if (mEnd == mStart)
+			return;
 		mEnd = mEnd == mBuffer ? mBuffer + mCap - 1 : std::prev(mEnd);
 	}
 
@@ -494,7 +507,7 @@ public:
 		return mBuffer + mCap;
 	}
 
-	ReverseIterator<T> rebgin() const noexcept
+	ReverseIterator<T> rbegin() const noexcept
 	{
 		return mBuffer + mCap;
 	}

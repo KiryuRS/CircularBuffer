@@ -45,6 +45,15 @@ using StringCB = circular_buffer<std::string>;
 using UCharCB = circular_buffer<unsigned char>;
 using CharCB = circular_buffer<char>;
 
+template <template <typename> class CB, typename T>
+void PrintCircularBuffer(const CB<T>& cb)
+{
+    std::cout << "\n";
+    for (const auto& elem : cb)
+        std::cout << elem << " ";
+    std::cout << "\n";
+}
+
 bool TestConstruction()
 {
     std::array<int, 5> arr{ 1,2,3,4,5 };
@@ -52,7 +61,13 @@ bool TestConstruction()
     IntCB cb2{ arr.begin(), arr.end() };
     IntCB cb3{ cb2 };
     IntCB cb4{ std::move(cb3) };
-    return cb1.capacity() == arr.size() && cb4[4] == arr.back();
+    IntCB cb5{ 1,2,3,4,5 };
+    UCharCB cb(1);
+
+    bool result1 = cb5.capacity() == cb4.size();
+    bool result2 = cb4.back() == cb5.back();
+    bool result3 = cb.front() == 0xCC;
+    return result1 && result2 && result3;
 }
 
 bool TestAssignment()
@@ -65,13 +80,14 @@ bool TestAssignment()
     cb4 = cb3;
     cb3 = cb4;
     cb4 = std::move(cb3);
+    cb4 = cb4;
     return cb4[4] == arr.back();
 }
 
 bool TestPushEmplacePop()
 {
-    std::array<int, 5> arr{ 2,6,7,-1,1 };
-    IntCB cb(arr.size());
+    std::array<int, 5> arr{ -1, 1, 2, 3, 4 };
+    IntCB cb(5);
     cb.push(-1);
     cb.emplace(1);
     cb.push(2);
@@ -87,28 +103,42 @@ bool TestPushEmplacePop()
     cb.push(1);
     cb.emplace(2);
     int* cData = cb.data();
-    int* aData = arr.data();
     bool is_same = true;
     for (unsigned i = 0; i != 5; ++i)
-        is_same = cData[i] != aData[i] ? false : is_same;
+        is_same = cData[i] != arr[i] ? false : is_same;
     return is_same;
 }
 
-bool TestRangedForLoop()
+bool TestIterators()
 {
-    CharCB cb(6);
-    cb.push('A');
-    cb.push('B');
-    cb.push('C');
-    cb.push('D');
-    cb.push('E');
-    cb.push('F');
-    cb.push('G');
-    const std::string result{ "GBCDEF" };
-    std::string str;
-    for (auto& elem : cb)
-        str += elem;
-    return result == str;
+    std::string str1, str2, str3;
+    CharCB cb(7);
+    cb.emplace('A');
+    cb.emplace('B');
+    cb.emplace('C');
+    cb.emplace('D');
+    cb.emplace('E');
+    cb.emplace('F');
+    cb.emplace('G');
+    
+    for (auto begin = cb.cbegin(), end = cb.cend(); begin != end; ++begin)
+        str1 += *begin;
+    for (auto begin = cb.crbegin(), end = cb.crend(); begin != end; ++begin)
+        str2 += *begin;
+    std::reverse(str2.begin(), str2.end());
+
+    for (const auto& elem : cb)
+        str3 += elem;
+    auto rIter = cb.rbegin();
+    ++rIter;
+    auto iter = cb.begin();
+    iter = iter + 6;
+    --iter;
+
+    bool result1 = str1 == str2;
+    bool result2 = str3 == str1;
+    bool result3 = *iter == *rIter;
+    return result1 && result2 && result3;
 }
 
 bool TestSubscript()
@@ -153,9 +183,9 @@ bool TestResize()
     cb.resize(1);
     cb.resize(3);
     cb.resize(5);
-    int first = cb.first();
+    int front = cb.front();
     int back = cb.back();
-    return first == back;
+    return front == back;
 }
 
 int main(void)
@@ -164,7 +194,7 @@ int main(void)
     TEST(TestConstruction());
     TEST(TestAssignment());
     TEST(TestPushEmplacePop());
-    TEST(TestRangedForLoop());
+    TEST(TestIterators());
     TEST(TestSubscript());
     TEST(TestSTLAlgorithms());
     TEST(TestResize());
