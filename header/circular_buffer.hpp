@@ -333,7 +333,6 @@ public:
 	void resize(size_t sz)
 	{
 		T* tmp = mAlloc.allocate(sz);
-		size_t curr_size = size();
 		if (mCap <= sz)
 		{
 			memcpy(tmp, mBuffer, sizeof(T) * mCap);
@@ -350,7 +349,6 @@ public:
 			size_t start_pos = mStart - mBuffer;
 			size_t curr_size = size();
 			mStart = tmp + start_pos % sz;
-			T* new_end = tmp + sz;
 			mEnd = mStart + curr_size % sz;
 		}
 		mAlloc.deallocate(mBuffer, mCap);
@@ -374,7 +372,7 @@ public:
 			throw std::out_of_range{ "array out of bounds!" };
 		T* iter = mStart + index;
 		T* end = mBuffer + mCap;
-		int offset = iter - end;
+		long int offset = iter - end;
 		if (offset < 0)
 			return *iter;
 		return *(mBuffer + static_cast<unsigned>(offset));
@@ -386,7 +384,7 @@ public:
 			throw std::out_of_range{ "array out of bounds!" };
 		T* iter = mStart + index;
 		T* end = mBuffer + mCap;
-		int offset = iter - end;
+		long int offset = iter - end;
 		if (offset < 0)
 			return *iter;
 		return *(mBuffer + static_cast<unsigned>(offset));
