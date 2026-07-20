@@ -83,8 +83,11 @@ TEST(test_spmc, single_producer_2_consumers)
         }
     }
 
-    const std::vector<int> expected_values{std::from_range_t{}, std::views::iota(0uz, FIFO_SIZE)};
     std::cout << std::format("Consumer timeouts: {}\n", consumer_timeouts.load(std::memory_order_relaxed));
+
+    EXPECT_TRUE(under_test.empty());
+
+    const std::vector<int> expected_values{std::from_range_t{}, std::views::iota(0uz, FIFO_SIZE)};
     EXPECT_EQ(actual_values, expected_values);
 }
 
