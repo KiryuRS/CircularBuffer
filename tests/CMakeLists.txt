@@ -17,4 +17,5 @@ function(add_unit_test TEST_FILENAME_WITHOUT_CPP)
     add_test(${TEST_FILENAME_WITHOUT_CPP} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TEST_FILENAME_WITHOUT_CPP}")
 endfunction()
 
-add_unit_test(test_circular_buffer)
+add_unit_test(test_fifo)
+add_unit_test(test_spmc)

@@ -8,6 +8,8 @@ project(circular_buffer
 include("${PROJECT_SOURCE_DIR}/cmake/compile_options.cmake")
 include("${PROJECT_SOURCE_DIR}/cmake/format.cmake")
 
+find_package(Boost REQUIRED COMPONENTS headers)
+
 set(CMAKE_COLOR_DIAGNOSTICS ON)
 set(CMAKE_VERBOSE_MAKEFILE OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -20,3 +22,4 @@ if (CCACHE_FOUND)
 endif()
 
 add_subdirectory(tests)
+add_subdirectory(benchmarks)

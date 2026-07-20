@@ -4,9 +4,9 @@ function(common_compile_options TARGET_NAME)
     set_target_properties(${TARGET_NAME}
         PROPERTIES
             LINKER_LANGUAGE         CXX
-            CXX_STANDARD            23
+            CXX_STANDARD            26
             CXX_STANDARD_REQUIRED   ON
-            CXX_EXTENSIONS          OFF
+            CXX_EXTENSIONS          ON
     )
 
     # Use ccache if available
@@ -35,6 +35,7 @@ function(common_compile_options TARGET_NAME)
             -fexceptions
             -fstrict-aliasing
             -fdiagnostics-color=always
+            -freflection
     )
 
     # optimization flags
