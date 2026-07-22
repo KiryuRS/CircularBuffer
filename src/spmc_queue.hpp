@@ -106,10 +106,11 @@ public:
     // @return: value wrapped in std::expected. std::nullopt either if empty, or consumer failed retrieval after some retries
     std::expected<value_type, error_status> pop()
     {
+        auto pop_cursor = pop_cursor_.load(std::memory_order_relaxed);
+
         // do not make the consumer fall into an infinite retry - give other threads a chance
         for (uint8_t i = 0; i != retries; ++i)
         {
-            auto pop_cursor = pop_cursor_.load(std::memory_order_relaxed);
             if (empty(cached_push_cursor_, pop_cursor))
             {
                 cached_push_cursor_ = push_cursor_.load(std::memory_order_acquire);
