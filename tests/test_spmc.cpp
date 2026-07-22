@@ -1,9 +1,11 @@
 #include <atomic>
-#include <spmc.hpp>
+#include <mutex>
+#include <spmc_queue.hpp>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <immintrin.h>
 #include <thread>
 #include <ranges>
 #include <vector>
@@ -12,39 +14,31 @@ namespace tests {
 
 using namespace ::testing;
 
-TEST(test_spmc, single_producer_single_consumer)
+template <typename T>
+struct test_multiple_consumers : ::testing::Test
 {
-    using test_type = int;
-    static constexpr std::size_t FIFO_SIZE = 131'072;
-    spmc<test_type> under_test{FIFO_SIZE};
+    static constexpr std::size_t value = T::value;
+};
 
-    constexpr int iterations = FIFO_SIZE;
-    std::jthread pop_thread{[&] {
-        for (int i = 0; i < iterations; ++i)
-        {
-            // default constructor sets has_value == true for a weird reason. Let's set to something else
-            std::expected<test_type, error_status> result{std::unexpected{error_status::EMPTY_BUFFER}};
-            while (!result)
-            {
-                result = under_test.pop();
-            }
-            ASSERT_EQ(result.value(), i);
-        }
-    }};
+using test_types = ::testing::Types<
+    std::integral_constant<std::size_t, 1>,
+    std::integral_constant<std::size_t, 2>,
+    std::integral_constant<std::size_t, 4>,
+    std::integral_constant<std::size_t, 8>,
+    std::integral_constant<std::size_t, 16>
+>;
+TYPED_TEST_SUITE(test_multiple_consumers, test_types);
 
-    for (int i = 0; i < iterations; ++i)
-    {
-        while (!under_test.push(i));
-    }
-}
-
-TEST(test_spmc, single_producer_2_consumers)
+TYPED_TEST(test_multiple_consumers, test_N_consumers_push_first)
 {
+    constexpr auto threads_count = this->value;
+
     std::atomic<uint32_t> consumer_timeouts;
+    std::atomic<bool> ready_flag;
 
     using test_type = int;
-    static constexpr std::size_t FIFO_SIZE = 256;
-    spmc<test_type> under_test{FIFO_SIZE};
+    static constexpr std::size_t FIFO_SIZE = 4'096;
+    spmc_queue<test_type> under_test{FIFO_SIZE};
     constexpr int iterations = FIFO_SIZE;
 
     std::vector<int> actual_values;
@@ -52,43 +46,114 @@ TEST(test_spmc, single_producer_2_consumers)
     std::mutex mutex;
 
     auto pop_thread_impl = [&] (std::stop_token token) {
-        std::cout << "Thread: " << std::this_thread::get_id() << " performing consumption ...\n";
+        std::vector<int> thread_values;
+        thread_values.reserve(FIFO_SIZE);
+
+        // wait for producer to produce something first ...
+        bool expected = false;
+        ready_flag.wait(expected, std::memory_order_acquire);
+
         while (!token.stop_requested())
         {
             const auto result = under_test.pop();
             if (result.has_value())
             {
-                std::lock_guard _{mutex};
-                actual_values.push_back(result.value());
-                continue;
+                thread_values.push_back(result.value());
             }
-
-            if (result.error() == error_status::CONSUMER_TIMEOUT)
+            else if (result.error() == error_status::CONSUMER_TIMEOUT)
             {
                 consumer_timeouts.fetch_add(1, std::memory_order_relaxed);
-                continue;
             }
+        }
+
+        // add it back to the main thread before exiting ...
+        {
+            std::scoped_lock _{mutex};
+            std::ranges::copy(thread_values, std::back_inserter(actual_values));
         }
     };
 
     // scoped namespace for testing.
-    // print heuristics after test
+    // print heuristics / EXPECT macros later
     {
-        std::jthread pop_1{pop_thread_impl};
-        std::jthread pop_2{pop_thread_impl};
+        std::array<std::jthread, threads_count> threads;
+        template for (constexpr auto i : std::views::iota(0uz, threads_count))
+        {
+            threads[i] = std::jthread{pop_thread_impl};
+        }
 
         for (int i = 0; i < iterations; ++i)
         {
-            while(!under_test.push(i));
+            under_test.push(i);
         }
+
+        // signal all consumer threads to start consuming
+        ready_flag.store(true, std::memory_order_release);
+        ready_flag.notify_all();
+
+        // wait for all consumers to finish consuming
+        while (!under_test.empty()) _mm_pause();
     }
 
-    std::cout << std::format("Consumer timeouts: {}\n", consumer_timeouts.load(std::memory_order_relaxed));
-
-    EXPECT_TRUE(under_test.empty());
+    std::cout << "Number of consumer timeouts: " << consumer_timeouts.load(std::memory_order_relaxed) << '\n';
 
     const std::vector<int> expected_values{std::from_range_t{}, std::views::iota(0uz, FIFO_SIZE)};
-    EXPECT_EQ(actual_values, expected_values);
+    std::ranges::sort(actual_values);
+    EXPECT_EQ(expected_values, actual_values);
+}
+
+TYPED_TEST(test_multiple_consumers, test_N_consumers_concurrent_push_pop)
+{
+    constexpr auto threads_count = this->value;
+
+    std::atomic<bool> ready_flag;
+
+    using test_type = int;
+    static constexpr std::size_t FIFO_SIZE = 4'096;
+    spmc_queue<test_type> under_test{FIFO_SIZE};
+    constexpr int iterations = FIFO_SIZE;
+
+    std::vector<int> actual_values;
+    actual_values.reserve(FIFO_SIZE);
+    std::mutex mutex;
+
+    auto pop_thread = [&] (std::stop_token stop_token) {
+        std::vector<int> popped_values;
+        popped_values.reserve(FIFO_SIZE);
+
+        while (!stop_token.stop_requested())
+        {
+            if (auto result = under_test.pop(); result.has_value())
+            {
+                popped_values.push_back(result.value());
+            }
+        }
+
+        std::scoped_lock _{mutex};
+        std::ranges::copy(popped_values, std::back_inserter(actual_values));
+    };
+
+    // scoped namespace for testing.
+    // EXPECT macros after
+    {
+        std::array<std::jthread, threads_count> threads;
+        template for (constexpr auto i : std::views::iota(0uz, threads_count))
+        {
+            threads[i] = std::jthread{pop_thread};
+        }
+
+        for (auto i = 0; i < iterations; ++i)
+        {
+            while (!under_test.push(i));
+        }
+
+        // wait for threads to finish consumption
+        while (!under_test.empty()) _mm_pause();
+    }
+
+    const std::vector<int> expected_values{std::from_range_t{}, std::views::iota(0uz, FIFO_SIZE)};
+    std::ranges::sort(actual_values);
+    EXPECT_EQ(expected_values, actual_values);
 }
 
 } // namespace tests
