@@ -1,6 +1,6 @@
 [requires]
 gtest/1.14.0
-boost/1.86.0
+boost/1.91.0
 
 [tool_requires]
 cmake/[>=3.3.0]

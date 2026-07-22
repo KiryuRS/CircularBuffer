@@ -8,6 +8,7 @@
 #include <memory>
 #include <expected>
 #include <utility>
+#include <debugging>
 
 enum class error_status
 {
@@ -21,14 +22,14 @@ enum class error_status
 // In most of the implementation it will be vastly similar to fifo_5.hpp.
 // Main difference is in pop function
 template <ring_compatible T, typename Alloc = std::allocator<T>>
-class spmc : Alloc
+class spmc_queue : Alloc
 {
 public:
     using value_type = T;
     using allocator_traits = std::allocator_traits<Alloc>;
     using size_type = allocator_traits::size_type;
 
-    explicit spmc(size_type capacity, const Alloc& alloc = Alloc{})
+    explicit spmc_queue(size_type capacity, const Alloc& alloc = Alloc{})
         : Alloc{alloc}
         , capacity_{round_nearest_exponent(capacity)}
         , ring_{allocator_traits::allocate(*this, capacity_)}
@@ -39,7 +40,7 @@ public:
     {
     }
 
-    ~spmc()
+    ~spmc_queue()
     {
         while (!empty())
         {
@@ -50,10 +51,10 @@ public:
         allocator_traits::deallocate(*this, ring_, capacity_);
     }
 
-    spmc(const spmc&) = delete;
-    spmc(spmc&&) noexcept = delete;
-    spmc& operator=(const spmc&) = delete;
-    spmc& operator=(spmc&&) noexcept = delete;
+    spmc_queue(const spmc_queue&) = delete;
+    spmc_queue(spmc_queue&&) noexcept = delete;
+    spmc_queue& operator=(const spmc_queue&) = delete;
+    spmc_queue& operator=(spmc_queue&&) noexcept = delete;
 
 public:
     // returns the number of elements in the fifo
@@ -105,26 +106,28 @@ public:
     // @return: value wrapped in std::expected. std::nullopt either if empty, or consumer failed retrieval after some retries
     std::expected<value_type, error_status> pop()
     {
-        auto pop_cursor = pop_cursor_.load(std::memory_order_relaxed);
-        if (empty(cached_push_cursor_, pop_cursor))
-        {
-            cached_push_cursor_ = push_cursor_.load(std::memory_order_acquire);
-            if (empty(cached_push_cursor_, pop_cursor_))
-            {
-                return std::unexpected{error_status::EMPTY_BUFFER};
-            }
-        }
-
         // do not make the consumer fall into an infinite retry - give other threads a chance
         for (uint8_t i = 0; i != retries; ++i)
         {
+            auto pop_cursor = pop_cursor_.load(std::memory_order_relaxed);
+            if (empty(cached_push_cursor_, pop_cursor))
+            {
+                cached_push_cursor_ = push_cursor_.load(std::memory_order_acquire);
+                if (empty(cached_push_cursor_, pop_cursor_))
+                {
+                    return std::unexpected{error_status::EMPTY_BUFFER};
+                }
+            }
+
             auto* elem_at = get_element(pop_cursor);
             value_type copy = *elem_at;
 
             // ensure that no other consumers have retrieved this same value and moved ahead of us.
             // if so, we undergo a spin-lock and retry again
-            if (!pop_cursor_.compare_exchange_weak(pop_cursor, pop_cursor + 1, std::memory_order_release, std::memory_order_relaxed))
+            auto temp_pop_cursor = pop_cursor;
+            if (!pop_cursor_.compare_exchange_weak(temp_pop_cursor, pop_cursor + 1, std::memory_order_release, std::memory_order_relaxed))
             {
+                pop_cursor = temp_pop_cursor;
                 _mm_pause();
                 continue;
             }
@@ -149,14 +152,19 @@ private:
         return push_cursor - pop_cursor;
     }
 
+    // used by push thread
     bool full(size_type push_cursor, size_type pop_cursor) const
     {
         return size(push_cursor, pop_cursor) == capacity_;
     }
 
+    // used by pop thread(s)
     bool empty(size_type push_cursor, size_type pop_cursor) const
     {
-        return size(push_cursor, pop_cursor) == 0;
+        // the cached_push_cursor_ will always start from 0, once we have a non-zero pop_cursor,
+        // the value returned from size will always underflow. hence its not 100% accurate to check if its 0.
+        const auto maybe_inaccurate_size = size(push_cursor, pop_cursor);
+        return maybe_inaccurate_size == 0 || maybe_inaccurate_size > capacity_;
     }
 
 private:

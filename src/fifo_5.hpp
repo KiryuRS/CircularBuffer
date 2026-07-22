@@ -131,7 +131,8 @@ private:
 
     bool empty(size_type push_cursor, size_type pop_cursor) const
     {
-        return size(push_cursor, pop_cursor) == 0;
+        const auto maybe_inaccurate_size = size(push_cursor, pop_cursor);
+        return maybe_inaccurate_size == 0 || maybe_inaccurate_size > capacity_;
     }
 
 private:
